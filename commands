@@ -1,5 +1,5 @@
 --------------
-ansible-playbook -i inventory/hosts deploy_k8s_cluters.yaml --limit host01.domain.local,host02.domain.local,host03.domain.local
+ansible-playbook -i inventory/hosts deploy_k8s_cluster.yaml --limit host01.domain.local,host02.domain.local,host03.domain.local
 --------------
 kubectl get nodes
 
