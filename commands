@@ -1,0 +1,11 @@
+--------------
+ansible-playbook -i inventory/test/hosts init_k8s.yaml --limit host01.domain.local,host02.domain.local,host03.domain.local
+--------------
+kubectl get nodes
+
+kubectl get pod -n kube-system -o wide
+
+kubeadm reset
+
+kubeadm init certs                   
+--------------
