@@ -1,0 +1,15 @@
+vrrp_instance VI_1 {
+    state MASTER
+    interface ens192
+    virtual_router_id 1
+    priority 100
+    advert_int 1
+    nopreempt
+    authentication {
+        auth_type PASS
+        auth_pass {{ keepalived_secret.stdout }}
+    }
+    virtual_ipaddress {
+        {{ api_ip }}
+    }
+}
