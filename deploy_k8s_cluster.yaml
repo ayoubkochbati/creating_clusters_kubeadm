@@ -1,0 +1,186 @@
+# tasks file for roles/sys/init_k8s
+- name: cluster k8s initialisation
+  hosts: all
+  gather_facts: True
+
+  vars:
+    api_ip: "10.202.11.60"
+    kube_version: "v1.18.6"
+    network: calico
+
+
+  become_user: root
+  become: yes
+  tasks:
+    - name: install keepalived
+      apt:
+        name: keepalived
+        state: present
+      when: ('kub_master' in group_names)
+
+    - name: generate random keepalived secret
+      command: openssl rand -base64 32
+      register: keepalived_secret
+      when: ('kub_primary_master' in group_names)
+
+    - name: install keepalived config file
+      template:
+        src: keepalived.conf.master.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: ('kub_primary_master' in group_names)
+
+    - name: install keepalived config file
+      template:
+        src: keepalived.conf.backup.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: ('kub_secondary_master' in group_names)
+      with_items: "{{ groups['kub_primary_master'] }}"
+
+    - name: activate keepalived on primary master
+      systemd:
+        state: started
+        enabled: yes
+        name: keepalived
+      when: ('kub_primary_master' in group_names)
+
+    - name: generate certificate-key for certificate distribution
+      command: kubeadm alpha certs certificate-key
+      register: certificatekey
+      when: ('kub_primary_master' in group_names)
+
+    - name: generate token for k8s init
+      command: kubeadm token generate
+      register: token
+      when: ('kub_primary_master' in group_names)
+
+    - name: install kubeadm config file
+      template:
+        src: kubeadminit.yaml.j2
+        dest: /root/kubeadm.yaml
+        owner: root
+        group: root
+        mode: '0644'
+      when: ('kub_primary_master' in group_names)
+
+    - name: init cluster and capture output
+      command:
+        cmd: kubeadm init --config=/root/kubeadm.yaml --upload-certs
+        creates: /etc/kubernetes/admin.conf
+      register: init_cluster
+      when: ('kub_primary_master' in group_names)
+
+    - name: Create Kubernetes config directory
+      file:
+        path: "/root/.kube/"
+        state: directory
+      register: prepare_kubeconfig_dir
+      when: ('kub_master' in group_names) and init_cluster is succeeded
+
+    - name: grab local copy of remote kubeconfig file
+      fetch:
+        src: /etc/kubernetes/admin.conf
+        dest: /tmp/admin.conf
+        flat: yes
+      register: grab_kubeconfig
+      when: ('kub_primary_master' in group_names) and prepare_kubeconfig_dir is succeeded
+
+    - name: Copy admin.conf to Home directory
+      copy:
+        src: /tmp/admin.conf
+        dest: "/root/.kube/config"
+        owner: root
+        group: root
+        mode: 0644
+      when: ('kub_master' in group_names) and grab_kubeconfig is succeeded
+
+    - name: untaint primary master node
+      command: kubectl taint node host01 node-role.kubernetes.io/master:NoSchedule-
+      when: ('kub_primary_master' in group_names)
+
+    - name: Enable and check kubelet service
+      systemd:
+        name: kubelet
+        daemon_reload: yes
+        state: started
+        enabled: yes
+      register: started_kubelet
+      when: ('kub_master' in group_names)
+
+    - name: Copy calico.yaml
+      copy:
+        src: /home/ansible/calico.yaml
+        dest: /root/calico.yaml
+        owner: root
+        group: root
+        mode: 0644
+      when: ('kub_primary_master' in group_names)
+
+    - name: activate calico
+      shell: kubectl apply -f /root/calico.yaml
+      when: ('kub_primary_master' in group_names)
+
+    - name: obtain join command from primary node to join secondary masters
+      command: kubeadm token create --print-join-command
+      register: joincommand
+      when: ('kub_primary_master' in group_names)
+
+    - name: copy certificates from primary master to ansible
+      fetch: src={{ item.src }} dest={{ item.dest }}
+      with_items:
+        - { src: '/etc/kubernetes/pki/sa.pub', dest: '/home/ansible/files/' }
+        - { src: '/etc/kubernetes/pki/ca.crt', dest: '/home/ansible/files/' }
+        - { src: '/etc/kubernetes/pki/ca.key', dest: '/home/ansible/files/' }
+        - { src: '/etc/kubernetes/pki/front-proxy-ca.crt', dest: '/home/ansible/files/' }
+        - { src: '/etc/kubernetes/pki/sa.key', dest: '/home/ansible/files/' }
+        - { src: '/etc/kubernetes/pki/front-proxy-ca.key', dest: '/home/ansible/files/' }
+        - { src: '/etc/kubernetes/pki/etcd/ca.crt', dest: '/home/ansible/files/etcd' }
+        - { src: '/etc/kubernetes/pki/etcd/ca.key', dest: '/home/ansible/files/etcd' }
+      when: ('kub_primary_master' in group_names)
+
+    - name: Create master certificate directory on secondary masters
+      file:
+        path: /etc/kubernetes/pki
+        state: directory
+        mode: '0755'
+      when: ('kub_secondary_master' in group_names)
+
+    - name: Create master certificate directory for etcd on secondary masters
+      file:
+        path: /etc/kubernetes/pki/etcd
+        state: directory
+        mode: '0755'
+      when: ('kub_secondary_master' in group_names)
+
+    - name: copy certificates from ansible to secondary masters
+      copy: src={{ item.src }} dest={{ item.dest }}
+      with_items:
+        - { src: '/home/ansible/files/host01.domain.local/etc/kubernetes/pki/sa.key', dest: '/etc/kubernetes/pki/sa.pub' }
+        - { src: '/home/ansible/files/host01.domain.local/etc/kubernetes/pki/ca.crt', dest: '/etc/kubernetes/pki/ca.crt' }
+        - { src: '/home/ansible/files/host01.domain.local/etc/kubernetes/pki/ca.key', dest: '/etc/kubernetes/pki/ca.key' }
+        - { src: '/home/ansible/files/host01.domain.local/etc/kubernetes/pki/front-proxy-ca.crt', dest: '/etc/kubernetes/pki/front-proxy-ca.crt' }
+        - { src: '/home/ansible/files/host01.domain.local/etc/kubernetes/pki/sa.key', dest: '/etc/kubernetes/pki/sa.key' }
+        - { src: '/home/ansible/files/host01.domain.local/etc/kubernetes/pki/front-proxy-ca.key', dest: '/etc/kubernetes/pki/front-proxy-ca.key' }
+        - { src: '/home/ansible/files/etcd/host01.domain.local/etc/kubernetes/pki/etcd/ca.crt', dest: '/etc/kubernetes/pki/etcd/ca.crt' }
+        - { src: '/home/ansible/files/etcd/host01.domain.local/etc/kubernetes/pki/etcd/ca.key', dest: '/etc/kubernetes/pki/etcd/ca.key' }
+      when: ('kub_secondary_master' in group_names)
+
+    - debug:
+        msg: hostvars[host01.domain.local]['joincommand']['stdout'] }}
+
+    - name: init cluster on secondary masters
+      shell: /usr/bin/nohup {{ hostvars[item]['joincommand']['stdout'] }} --control-plane
+      when: ('kub_secondary_master' in group_names)
+      with_items: "{{ groups['kub_primary_master'] }}"
+
+    - name: activate keepalived on secondary masters
+      systemd:
+        state: started
+        enabled: yes
+        name: keepalived
+      when: ('kub_secondary_master' in group_names)
