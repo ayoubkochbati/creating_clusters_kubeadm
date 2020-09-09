@@ -100,7 +100,7 @@
       when: ('kub_master' in group_names) and grab_kubeconfig is succeeded
 
     - name: untaint primary master node
-      command: kubectl taint node stlkube10 node-role.kubernetes.io/master:NoSchedule-
+      command: kubectl taint node host01 node-role.kubernetes.io/master:NoSchedule-
       when: ('kub_primary_master' in group_names)
 
     - name: Enable and check kubelet service
@@ -160,18 +160,18 @@
     - name: copy certificates from ansible to secondary masters
       copy: src={{ item.src }} dest={{ item.dest }}
       with_items:
-        - { src: '/home/ansible/files/stlkube10.cssf.lu/etc/kubernetes/pki/sa.key', dest: '/etc/kubernetes/pki/sa.pub' }
-        - { src: '/home/ansible/files/stlkube10.cssf.lu/etc/kubernetes/pki/ca.crt', dest: '/etc/kubernetes/pki/ca.crt' }
-        - { src: '/home/ansible/files/stlkube10.cssf.lu/etc/kubernetes/pki/ca.key', dest: '/etc/kubernetes/pki/ca.key' }
-        - { src: '/home/ansible/files/stlkube10.cssf.lu/etc/kubernetes/pki/front-proxy-ca.crt', dest: '/etc/kubernetes/pki/front-proxy-ca.crt' }
-        - { src: '/home/ansible/files/stlkube10.cssf.lu/etc/kubernetes/pki/sa.key', dest: '/etc/kubernetes/pki/sa.key' }
-        - { src: '/home/ansible/files/stlkube10.cssf.lu/etc/kubernetes/pki/front-proxy-ca.key', dest: '/etc/kubernetes/pki/front-proxy-ca.key' }
-        - { src: '/home/ansible/files/etcd/stlkube10.cssf.lu/etc/kubernetes/pki/etcd/ca.crt', dest: '/etc/kubernetes/pki/etcd/ca.crt' }
-        - { src: '/home/ansible/files/etcd/stlkube10.cssf.lu/etc/kubernetes/pki/etcd/ca.key', dest: '/etc/kubernetes/pki/etcd/ca.key' }
+        - { src: '/home/ansible/files/host01.xxxx.local/etc/kubernetes/pki/sa.key', dest: '/etc/kubernetes/pki/sa.pub' }
+        - { src: '/home/ansible/files/host01.xxxx.local/etc/kubernetes/pki/ca.crt', dest: '/etc/kubernetes/pki/ca.crt' }
+        - { src: '/home/ansible/files/host01.xxxx.local/etc/kubernetes/pki/ca.key', dest: '/etc/kubernetes/pki/ca.key' }
+        - { src: '/home/ansible/files/host01.xxxx.local/etc/kubernetes/pki/front-proxy-ca.crt', dest: '/etc/kubernetes/pki/front-proxy-ca.crt' }
+        - { src: '/home/ansible/files/host01.xxxx.local/etc/kubernetes/pki/sa.key', dest: '/etc/kubernetes/pki/sa.key' }
+        - { src: '/home/ansible/files/host01.xxxx.local/etc/kubernetes/pki/front-proxy-ca.key', dest: '/etc/kubernetes/pki/front-proxy-ca.key' }
+        - { src: '/home/ansible/files/etcd/host01.xxxx.local/etc/kubernetes/pki/etcd/ca.crt', dest: '/etc/kubernetes/pki/etcd/ca.crt' }
+        - { src: '/home/ansible/files/etcd/host01.xxxx.local/etc/kubernetes/pki/etcd/ca.key', dest: '/etc/kubernetes/pki/etcd/ca.key' }
       when: ('kub_secondary_master' in group_names)
 
     - debug:
-        msg: hostvars[splkube10.cssf.lu]['joincommand']['stdout'] }}
+        msg: hostvars[host01.xxxx.local]['joincommand']['stdout'] }}
 
     - name: init cluster on secondary masters
       shell: /usr/bin/nohup {{ hostvars[item]['joincommand']['stdout'] }} --control-plane
