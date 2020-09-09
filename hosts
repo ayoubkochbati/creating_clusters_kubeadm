@@ -1,0 +1,16 @@
+[kublab:children]
+kub_primary_master
+kub_secondary_master
+
+[kub_master:children]
+kub_primary_master
+kub_secondary_master
+
+[kub_primary_master]
+host01.domain.local ansible_host=host01.domain.local real_hostname=host01 real_domainname=domain.local
+
+[kub_secondary_master]
+host02.domain.local ansible_host=host02.domain.local real_hostname=host02 real_domainname=domain.local
+host03.domain.local ansible_host=host03.domain.local real_hostname=host03 real_domainname=domain.local
+
+[kub_node_no_master]
