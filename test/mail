@@ -1,0 +1,50 @@
+
+-----------------------
+mail 2
+
+hello,
+
+changement fait pour faire un "taint" sur le master (mise d'un label)
+code avait le nom du host explicite dans le code :
+
+avant: 
+    - name: untaint primary master node
+      command: kubectl taint node host01.domain.local node-role.kubernetes.io/master:NoSchedule-
+      when: ('kub_primary_master' in group_names)
+
+
+bien-sur ca doit marcher sur tout les clusters, donc j'ai essayé de rendre dans un forme dynamique
+j'espere que c'est +- correcte, on verra quand on le tourne
+
+    - name: untaint primary master node
+      command: kubectl taint node {{ hostvars[item]['ansible_fqdn'] }} node-role.kubernetes.io/master:NoSchedule-
+      when: ('kub_primary_master' in group_names)
+      with_items: "{{ groups['kub_primary_master'] }}"
+
+-> items est comme un "for" loop qui va tourner pour tout les machnines dans group "kub_primary_master" -> il y a juste une primary
+     donc il va mettre "host01.domain.local" dans le truc en haut ou ca dit "item" et donc il va faire : {{ hostvars[host01.domain.local][ansible_fqdn] }} qui va etre remplacé par le nom du host stlkube10.cssf.lu
+     va peut-etre aussi marcher si on enleve le partie ['ansible_fqdn'] .. pas trop sur
+
+
+en plus ou moins meme chose plus bas dans le playbook:
+
+ici c'etait hardcodé /home/ansible/files/host01.domain.local/etc/kubernetes/pki/
+donc j'ai fait : 
+
+    - name: copy certificates from ansible to secondary masters
+      copy: src={{ item.src }} dest={{ item.dest }}
+      with_items:
+        - { src: '/home/ansible/files/'{{ hostvars[item]['ansible_fqdn'] }}'/etc/kubernetes/pki/sa.key', dest: '/etc/kubernetes/pki/sa.pub' }
+        - { src: '/home/ansible/files/'{{ hostvars[item]['ansible_fqdn'] }}'/etc/kubernetes/pki/ca.crt', dest: '/etc/kubernetes/pki/ca.crt' }
+        - { src: '/home/ansible/files/'{{ hostvars[item]['ansible_fqdn'] }}'/etc/kubernetes/pki/ca.key', dest: '/etc/kubernetes/pki/ca.key' }
+        - { src: '/home/ansible/files/'{{ hostvars[item]['ansible_fqdn'] }}'/etc/kubernetes/pki/front-proxy-ca.crt', dest: '/etc/kubernetes/pki/front-proxy-ca.crt' }
+        - { src: '/home/ansible/files/'{{ hostvars[item]['ansible_fqdn'] }}'/etc/kubernetes/pki/sa.key', dest: '/etc/kubernetes/pki/sa.key' }
+        - { src: '/home/ansible/files/'{{ hostvars[item]['ansible_fqdn'] }}'/etc/kubernetes/pki/front-proxy-ca.key', dest: '/etc/kubernetes/pki/front-proxy-ca.key' }
+        - { src: '/home/ansible/files/etcd/'{{ hostvars[item]['ansible_fqdn'] }}'/etc/kubernetes/pki/etcd/ca.crt', dest: '/etc/kubernetes/pki/etcd/ca.crt' }
+        - { src: '/home/ansible/files/etcd/'{{ hostvars[item]['ansible_fqdn'] }}'/etc/kubernetes/pki/etcd/ca.key', dest: '/etc/kubernetes/pki/etcd/ca.key' }
+      when: ('kub_secondary_master' in group_names)
+      with_items: "{{ groups['kub_primary_master'] }}"
+      
+      --------------------------
+      
+      
